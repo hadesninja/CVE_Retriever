@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CVE Details Retriever</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        .container {
+            width: 100%;
+            margin: auto;
+        }
+        .input-field {
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+            box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+            box-shadow: 1px 1px 5px rgba(0, 0, 0, 0.1);
+        }
+        th {
+            background-color: #f0f0f0;
+            color: black;
+            font-weight: bold;
+        }
+        th, td {
+            border-radius: 4px;
+        }
+        th:hover, td:hover {
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.15);
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        button {
+            margin-top: 20px;
+        }
+
+        /* Severity color classes */
+        .severity-low {
+            background-color: #4caf50; /* Green */
+            color: white;
+        }
+        .severity-medium {
+            background-color: hwb(37 1% 0%); /* Yellow */
+            color: black;
+        }
+        .severity-high {
+            background-color: #fd4300; /* Orange */
+            color: white;
+        }
+        .severity-critical {
+            background-color: #b90404; /* Red */
+            color: white;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h4>CVE Details Retriever</h4><br>  
+    <div class="input-field">
+        <input type="text" id="cveIds" placeholder="e.g., CVE-2021-34527, CVE-2021-34528">
+        <label for="cveIds">Enter CVE IDs (comma separated):</label>
+    </div>
+    <button class="btn waves-effect waves-light" onclick="retrieveCveDetails()">Retrieve CVE Details</button>
+    <div class="input-field">
+        <table id="resultTable" class="highlight">
+            <thead>
+            <tr>
+                <th>CVE ID</th>
+                <th>Description</th>
+                <th>Published Date</th>
+                <th>Last Modified Date</th>
+                <th>Severity</th>
+                <th>Vector</th>
+                <th>Base Score</th>
+            </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function retrieveCveDetails() {
+        const cveIds = document.getElementById('cveIds').value.trim().split(',').map(id => id.trim());
+        const resultTableBody = document.querySelector('#resultTable tbody');
+        resultTableBody.innerHTML = ''; // Clear previous data
+
+        if (cveIds.length === 0 || cveIds[0] === '') {
+            displayMessage("Please enter at least one CVE ID.");
+            return;
+        }
+
+        for (const cveId of cveIds) {
+            const url = `https://services.nvd.nist.gov/rest/json/cves/2.0?cveId=${cveId}`;
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Error retrieving CVE details for ${cveId}: ${response.statusText}`);
+                }
+                const cveDetails = await response.json();
+                displayCveDetails(cveDetails);
+            } catch (error) {
+                displayMessage(error.message);
+            }
+        }
+    }
+
+    function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toISOString().split('T')[0]; // Extract the YYYY-MM-DD format
+    }
+
+    function getSeverityClass(severity) {
+        switch (severity.toLowerCase()) {
+            case 'low': return 'severity-low';
+            case 'medium': return 'severity-medium';
+            case 'high': return 'severity-high';
+            case 'critical': return 'severity-critical';
+            default: return ''; // No color if severity is unknown
+        }
+    }
+
+    function displayCveDetails(cveDetails) {
+        const resultTableBody = document.querySelector('#resultTable tbody');
+        if (cveDetails.vulnerabilities && cveDetails.vulnerabilities.length > 0) {
+            cveDetails.vulnerabilities.forEach(vulnerability => {
+                const cve = vulnerability.cve;
+                const cveId = cve.id || 'N/A';
+                const description = cve.descriptions ? cve.descriptions[0].value : 'N/A';
+                const publishedDate = cve.published ? formatDate(cve.published) : 'N/A';
+                const lastModifiedDate = cve.lastModified ? formatDate(cve.lastModified) : 'N/A';
+
+                const metrics = cve.metrics?.cvssMetricV31?.[0]?.cvssData || cve.metrics?.cvssMetricV30?.[0]?.cvssData || {};
+                const severity = metrics.baseSeverity || 'N/A';
+                const vector = metrics.vectorString || 'N/A';
+                const baseScore = metrics.baseScore || 'N/A';
+
+                const severityClass = getSeverityClass(severity);
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${cveId}</td>
+                    <td>${description}</td>
+                    <td>${publishedDate}</td>
+                    <td>${lastModifiedDate}</td>
+                    <td class="${severityClass}">${severity}</td>
+                    <td>${vector}</td>
+                    <td>${baseScore}</td>
+                `;
+                resultTableBody.appendChild(row);
+            });
+        } else {
+            displayMessage("No vulnerabilities found for the given CVE ID.");
+        }
+    }
+
+    function displayMessage(message) {
+        const resultTableBody = document.querySelector('#resultTable tbody');
+        const row = document.createElement('tr');
+        const cell = document.createElement('td');
+        cell.colSpan = 7;  
+        cell.textContent = message;
+        row.appendChild(cell);
+        resultTableBody.appendChild(row);
+    }
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+</body>
+</html>
